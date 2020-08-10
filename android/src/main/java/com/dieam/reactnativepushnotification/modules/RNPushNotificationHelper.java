@@ -308,6 +308,9 @@ public class RNPushNotificationHelper {
                         visibility = NotificationCompat.VISIBILITY_PRIVATE;
                 }
             }
+            
+            PendingIntent fullScreenIntent = toScheduleNotificationIntent(bundle);
+
 
             NotificationCompat.Builder notification = new NotificationCompat.Builder(context, channel_id)
                     .setContentTitle(title)
@@ -315,6 +318,7 @@ public class RNPushNotificationHelper {
                     .setVisibility(visibility)
                     .setPriority(priority)
                     .setAutoCancel(bundle.getBoolean("autoCancel", true))
+                    .setFullScreenIntent(fullScreenIntent, true)
                     .setOnlyAlertOnce(bundle.getBoolean("onlyAlertOnce", false));
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) { // API 24 and higher
