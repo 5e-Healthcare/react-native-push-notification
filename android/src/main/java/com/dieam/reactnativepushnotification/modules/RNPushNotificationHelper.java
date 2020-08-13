@@ -579,12 +579,8 @@ public class RNPushNotificationHelper {
             }
 
             if (!(this.isApplicationInForeground() && bundle.getBoolean("ignoreInForeground"))) {
-                notification.setCategory(Notification.CATEGORY_ALARM);
-                notification.setTimeoutAfter(2000000);
                 Notification info = notification.build();
-                info.defaults |= Notification.DEFAULT_ALL;
-                info.flags |= Notification.FLAG_NO_CLEAR | Notification.FLAG_ONGOING_EVENT;
-                //info.flags |= Notification.FLAG_ONGOING_EVENT | Notification.FLAG_NO_CLEAR;
+                info.defaults |= Notification.DEFAULT_LIGHTS;
 
                 if (bundle.containsKey("tag")) {
                     String tag = bundle.getString("tag");
