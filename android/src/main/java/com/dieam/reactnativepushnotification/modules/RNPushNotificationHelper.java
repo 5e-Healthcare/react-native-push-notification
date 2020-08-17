@@ -23,9 +23,12 @@ import android.os.Build;
 import android.os.Bundle;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
+import android.widget.RemoteViews;
 
 import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
+import androidx.core.graphics.drawable.RoundedBitmapDrawable;
+import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReadableArray;
@@ -36,6 +39,13 @@ import com.facebook.react.bridge.WritableMap;
 import org.json.JSONArray;
 import org.json.JSONException;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -44,6 +54,7 @@ import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Map;
 
+import static android.os.FileUtils.copy;
 import static com.dieam.reactnativepushnotification.modules.RNPushNotification.LOG_TAG;
 import static com.dieam.reactnativepushnotification.modules.RNPushNotificationAttributes.fromJson;
 
@@ -196,6 +207,8 @@ public class RNPushNotificationHelper {
       aggregator.setBigPictureUrl(context, bundle.getString("bigPictureUrl"));
     }
 
+
+
     public void sendToNotificationCentreWithPicture(Bundle bundle, Bitmap largeIconBitmap, Bitmap bigPictureBitmap) {
         try {
             Class intentClass = getMainActivityClass();
@@ -223,6 +236,7 @@ public class RNPushNotificationHelper {
 
             String title = bundle.getString("title");
             boolean headsUp = bundle.getBoolean("headsUp", false);
+            String type = bundle.getString("type", "notification");
             if (title == null) {
                 ApplicationInfo appInfo = context.getApplicationInfo();
                 title = context.getPackageManager().getApplicationLabel(appInfo).toString();
@@ -310,14 +324,22 @@ public class RNPushNotificationHelper {
                 }
             }
 
+
+            Intent intent = new Intent(context, intentClass);
+            intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            bundle.putBoolean("foreground", this.isApplicationInForeground());
+            bundle.putBoolean("userInteraction", true);
+            intent.putExtra("notification", bundle);
+            int notificationID = Integer.parseInt(notificationIdString);
+            String messageId = bundle.getString("messageId");
             NotificationCompat.Builder notification = new NotificationCompat.Builder(context, channel_id)
                     .setContentTitle(title)
-                    .setTicker(bundle.getString("ticker"))
                     .setVisibility(visibility)
                     .setPriority(priority)
                     .setAutoCancel(bundle.getBoolean("autoCancel", true))
-                    .setOnlyAlertOnce(bundle.getBoolean("onlyAlertOnce", false));
-            
+                    .setOnlyAlertOnce(bundle.getBoolean("onlyAlertOnce", false))
+                    .setTicker(bundle.getString("ticker"));
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) { // API 24 and higher
                 // Restore showing timestamp on Android 7+
                 // Source: https://developer.android.com/reference/android/app/Notification.Builder.html#setShowWhen(boolean)
@@ -422,14 +444,7 @@ public class RNPushNotificationHelper {
 
             notification.setStyle(style);
 
-            Intent intent = new Intent(context, intentClass);
-            intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            bundle.putBoolean("foreground", this.isApplicationInForeground());
-            bundle.putBoolean("userInteraction", true);
-            intent.putExtra("notification", bundle);
-
             // Add message_id to intent so react-native-firebase/messaging can identify it
-            String messageId = bundle.getString("messageId");
             if (messageId != null) {
                 intent.putExtra("message_id", messageId);
             }
@@ -470,8 +485,6 @@ public class RNPushNotificationHelper {
                     notification.setColor(defaultColor);
                 }
             }
-
-            int notificationID = Integer.parseInt(notificationIdString);
 
             PendingIntent pendingIntent = PendingIntent.getActivity(context, notificationID, intent,
                     PendingIntent.FLAG_UPDATE_CURRENT);
@@ -515,8 +528,7 @@ public class RNPushNotificationHelper {
             checkOrCreateChannel(notificationManager, channel_id, channel_name, channel_description, soundUri, importance, vibratePattern);
 
             notification.setChannelId(channel_id);
-            if (headsUp) notification.setFullScreenIntent(pendingIntent, true);
-            else notification.setContentIntent(pendingIntent);
+
 
             JSONArray actionsArray = null;
             try {
@@ -556,6 +568,7 @@ public class RNPushNotificationHelper {
                     PendingIntent pendingActionIntent = PendingIntent.getBroadcast(context, notificationID, actionIntent,
                             PendingIntent.FLAG_UPDATE_CURRENT);
 
+                    if(!type.equalsIgnoreCase("call"))
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                       notification.addAction(new NotificationCompat.Action.Builder(icon, action, pendingActionIntent).build());
                     } else {
@@ -578,10 +591,28 @@ public class RNPushNotificationHelper {
                 editor.apply();
             }
 
-            if (!(this.isApplicationInForeground() && bundle.getBoolean("ignoreInForeground"))) {
-                Notification info = notification.build();
-                info.defaults |= Notification.DEFAULT_LIGHTS;
+            if(type.equalsIgnoreCase("call")) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && headsUp) {
+                    phoneCallLayout(notification, headsUp, bundle, intent, messageId, notificationID);
+                }
+            }
 
+            if (!headsUp) {
+                notification.setContentIntent(pendingIntent);
+            } else {
+                notification.setFullScreenIntent(pendingIntent, true);
+            }
+
+
+            if (!(this.isApplicationInForeground() && bundle.getBoolean("ignoreInForeground"))) {
+                if (type.equalsIgnoreCase("call")) {
+                    notification.setCategory(Notification.CATEGORY_ALARM);
+                }
+                Notification info = notification.build();
+                info.defaults |= Notification.DEFAULT_ALL;
+                if (type.equalsIgnoreCase("call")) {
+                    info.flags |= Notification.FLAG_NO_CLEAR | Notification.FLAG_ONGOING_EVENT;
+                }
                 if (bundle.containsKey("tag")) {
                     String tag = bundle.getString("tag");
                     notificationManager.notify(tag, notificationID, info);
@@ -669,6 +700,85 @@ public class RNPushNotificationHelper {
                 this.sendNotificationScheduled(bundle);
             }
         }
+    }
+
+    public static Bitmap loadBitmap(String url) throws IOException {
+        URL newurl = new URL(url);
+        Bitmap mIcon_val = BitmapFactory.decodeStream(newurl.openConnection().getInputStream());
+        return mIcon_val;
+    }
+
+    private void phoneCallLayout(final NotificationCompat.Builder notification,
+                                 final Boolean headsUp, final Bundle bundle,
+                                 final Intent intent,
+                                 final String messageId,
+                                 final int notificationID) throws IOException {
+        final String packageName = context.getPackageName();
+        Resources res = context.getResources();
+        int layoutId = res.getIdentifier("custom_call", "layout", packageName);
+        if (layoutId == 0) {
+            return;
+        }
+        int title = res.getIdentifier("title", "id", packageName);
+        int message = res.getIdentifier("message", "id", packageName);
+        int imageView = res.getIdentifier("img_view", "id", packageName);
+        int answer = res.getIdentifier("answer", "id", packageName);
+        int reject = res.getIdentifier("reject", "id", packageName);
+        RemoteViews view = new RemoteViews(packageName, layoutId);
+        view.setTextViewText(title, bundle.getString("title"));
+        view.setTextViewText(message, bundle.getString("message"));
+        if (bundle.getString("smallIconUri") != null) {
+            RoundedBitmapDrawable dr = RoundedBitmapDrawableFactory.create(res, loadBitmap(bundle.getString("smallIconUri")));
+            dr.setCornerRadius(25F);
+            view.setImageViewBitmap(imageView, dr.getBitmap());
+        } else {
+            view.setImageViewResource(imageView, res.getIdentifier("ic_launcher", "mipmap", packageName));
+        }
+        Intent actionAnswerIntent = new Intent(context, RNPushNotificationActions.class);
+        actionAnswerIntent.setAction(packageName + ".ACTION_0");
+
+        actionAnswerIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+
+        bundle.putString("action", "Answer");
+        actionAnswerIntent.putExtra("notification", bundle);
+        actionAnswerIntent.setPackage(packageName);
+        if (messageId != null) {
+            intent.putExtra("message_id", messageId);
+        }
+
+        PendingIntent pendingAnswerActionIntent = PendingIntent.getBroadcast(context, notificationID, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT);
+        view.setOnClickPendingIntent(answer, pendingAnswerActionIntent);
+
+        Intent actionRejectIntent = new Intent(context, RNPushNotificationActions.class);
+        actionRejectIntent.setAction(packageName + ".ACTION_1");
+
+        actionRejectIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+
+        // Add "action" for later identifying which button gets pressed.
+        bundle.putString("action", "Reject");
+        actionRejectIntent.putExtra("notification", bundle);
+        actionRejectIntent.setPackage(packageName);
+        if (messageId != null) {
+            intent.putExtra("message_id", messageId);
+        }
+
+        PendingIntent pendingRejectActionIntent = PendingIntent.getBroadcast(context, notificationID, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT);
+        view.setOnClickPendingIntent(reject, pendingRejectActionIntent);
+
+        //Removing these
+        notification.setContentTitle(null);
+        notification.setContent(null);
+        notification.setContentText(null);
+        notification.setContentInfo(null);
+        notification.setStyle(null);
+
+
+        notification.setContent(view);
+        notification.setCustomContentView(view);
+        notification.setCustomBigContentView(view);
+        notification.setCustomHeadsUpContentView(view);
     }
 
     private Uri getSoundUri(String soundName) {

@@ -53,6 +53,8 @@ export class PushNotificationObject {
   autoCancel?: boolean;
   largeIcon?: string;
   smallIcon?: string;
+  largeIconUri?: string;
+  smallIconUri?: string;
   bigText?: string;
   subText?: string;
   color?: string;
@@ -65,6 +67,7 @@ export class PushNotificationObject {
   visibility?: VisibilityType;
   importance?: ImportanceType;
   headsUp?: boolean;
+  type?: 'notification' | 'call';
 
   /* iOS only properties */
   alertAction?: any;
