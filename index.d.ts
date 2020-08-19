@@ -68,6 +68,7 @@ export class PushNotificationObject {
   importance?: ImportanceType;
   headsUp?: boolean;
   type?: 'notification' | 'call';
+  invokeApp?: boolean;
 
   /* iOS only properties */
   alertAction?: any;

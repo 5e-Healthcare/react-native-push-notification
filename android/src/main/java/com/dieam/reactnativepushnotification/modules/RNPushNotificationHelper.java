@@ -746,8 +746,10 @@ public class RNPushNotificationHelper {
             intent.putExtra("message_id", messageId);
         }
 
-        PendingIntent pendingAnswerActionIntent = PendingIntent.getBroadcast(context, notificationID, intent,
+        PendingIntent pendingAnswerActionIntent = PendingIntent.getBroadcast(context, notificationID, actionAnswerIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT);
+        //view.setPendingIntentTemplate(answer, pendingAnswerActionIntent);
+        //view.setOnClickFillInIntent(answer, actionAnswerIntent);
         view.setOnClickPendingIntent(answer, pendingAnswerActionIntent);
 
         Intent actionRejectIntent = new Intent(context, RNPushNotificationActions.class);
@@ -755,7 +757,7 @@ public class RNPushNotificationHelper {
 
         actionRejectIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
 
-        // Add "action" for later identifying which button gets pressed.
+// Add "action" for later identifying which button gets pressed.
         bundle.putString("action", "Reject");
         actionRejectIntent.putExtra("notification", bundle);
         actionRejectIntent.setPackage(packageName);
@@ -763,16 +765,11 @@ public class RNPushNotificationHelper {
             intent.putExtra("message_id", messageId);
         }
 
-        PendingIntent pendingRejectActionIntent = PendingIntent.getBroadcast(context, notificationID, intent,
+        PendingIntent pendingRejectActionIntent = PendingIntent.getBroadcast(context, notificationID, actionRejectIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT);
+        //view.setPendingIntentTemplate(reject, pendingRejectActionIntent);
+        //view.setOnClickFillInIntent(reject, actionRejectIntent);
         view.setOnClickPendingIntent(reject, pendingRejectActionIntent);
-
-        //Removing these
-        notification.setContentTitle(null);
-        notification.setContent(null);
-        notification.setContentText(null);
-        notification.setContentInfo(null);
-        notification.setStyle(null);
 
 
         notification.setContent(view);
