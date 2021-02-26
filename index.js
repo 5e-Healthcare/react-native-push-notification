@@ -4,9 +4,9 @@
 
 'use strict';
 
-import {AppState} from 'react-native';
+import { AppState } from "react-native";
 
-var RNNotificationsComponent = require('./component');
+var RNNotificationsComponent = require( './component' );
 
 var RNNotifications = RNNotificationsComponent.component;
 
@@ -27,14 +27,14 @@ var Notifications = {
   permissions: {
     alert: true,
     badge: true,
-    sound: true,
-  },
+    sound: true
+  }
 };
 
-Notifications.callNative = function (name, params) {
-  if (typeof this.handler[name] === 'function') {
-    // eslint-disable-next-line valid-typeof
-    if (typeof params !== 'array' && typeof params !== 'object') {
+Notifications.callNative = function(name, params) {
+  if ( typeof this.handler[name] === 'function' ) {
+    if ( typeof params !== 'array' &&
+       typeof params !== 'object' ) {
       params = [];
     }
 
@@ -54,32 +54,32 @@ Notifications.callNative = function (name, params) {
  * @param {Object}    options.permissions - Permissions list
  * @param {Boolean}   options.requestPermissions - Check permissions when register
  */
-Notifications.configure = function (options) {
-  if (typeof options.onRegister !== 'undefined') {
+Notifications.configure = function(options) {
+  if ( typeof options.onRegister !== 'undefined' ) {
     this.onRegister = options.onRegister;
   }
 
-  if (typeof options.onRegistrationError !== 'undefined') {
+  if ( typeof options.onRegistrationError !== 'undefined' ) {
     this.onRegistrationError = options.onRegistrationError;
   }
 
-  if (typeof options.onNotification !== 'undefined') {
+  if ( typeof options.onNotification !== 'undefined' ) {
     this.onNotification = options.onNotification;
   }
 
-  if (typeof options.onAction !== 'undefined') {
+  if ( typeof options.onAction !== 'undefined' ) {
     this.onAction = options.onAction;
   }
 
-  if (typeof options.permissions !== 'undefined') {
+  if ( typeof options.permissions !== 'undefined' ) {
     this.permissions = options.permissions;
   }
 
-  if (typeof options.onRemoteFetch !== 'undefined') {
+  if ( typeof options.onRemoteFetch !== 'undefined' ) {
     this.onRemoteFetch = options.onRemoteFetch;
   }
 
-  if (this.isLoaded === false) {
+  if ( this.isLoaded === false ) {
     this._onRegister = this._onRegister.bind(this);
     this._onRegistrationError = this._onRegistrationError.bind(this);
     this._onNotification = this._onNotification.bind(this);
