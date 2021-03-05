@@ -146,6 +146,10 @@ Notifications.unregister = function() {
  * @param {Object}    details.userInfo -  iOS ONLY: The userInfo used in the notification alert.
  */
 Notifications.localNotification = function(details) {
+  if ('android' === Platform.os && details && !details.channelId) {
+    console.warn('No channel id passed, notifications may not work.');
+  }
+
   if (details && typeof details.id === 'number') {
     if (isNaN(details.id)) {
       console.warn('NaN value has been passed as id');
@@ -172,15 +176,15 @@ Notifications.localNotification = function(details) {
     }
 
     // for valid fields see: https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/PayloadKeyReference.html
-    // alertTitle only valid for apple watch: https://developer.apple.com/library/ios/documentation/iPhone/Reference/UILocalNotification_Class/#//apple_ref/occ/instp/UILocalNotification/alertTitle
 
-    this.handler.presentLocalNotification({
-      alertTitle: details.title,
-      alertBody: details.message,
-      alertAction: details.alertAction,
+    this.handler.addNotificationRequest({
+      id: (!details.id ? Math.floor(Math.random() * Math.pow(2, 32)).toString() : details.id),
+      title: details.title,
+      body: details.message,
+      badge: details.number,
+      sound: soundName,
+      isSilent: details.playSound === false,
       category: details.category,
-      soundName: soundName,
-      applicationIconBadgeNumber: details.number,
       userInfo: details.userInfo
     });
   } else {
@@ -207,6 +211,10 @@ Notifications.localNotification = function(details) {
     if(details && Array.isArray(details.actions)) {
       details.actions = JSON.stringify(details.actions);
     }
+
+    if(details.userInfo) {
+      details.userInfo = JSON.stringify(details.userInfo);
+    }
   
     this.handler.presentLocalNotification(details);
   }
@@ -218,6 +226,10 @@ Notifications.localNotification = function(details) {
  * @param {Date}    details.date - The date and time when the system should deliver the notification
  */
 Notifications.localNotificationSchedule = function(details) {
+  if ('android' === Platform.os && details && !details.channelId) {
+    console.warn('No channel id passed, notifications may not work.');
+  }
+  
   if (details && typeof details.id === 'number') {
     if(isNaN(details.id)) {
       console.warn('NaN value has been passed as id');
@@ -242,25 +254,22 @@ Notifications.localNotificationSchedule = function(details) {
     }
 
     const iosDetails = {
+      id: (!details.id ? Math.floor(Math.random() * Math.pow(2, 32)).toString() : details.id),
       fireDate: details.date.toISOString(),
-      alertTitle: details.title,
-      alertBody: details.message,
+      title: details.title,
+      body: details.message,
+      sound: soundName,
+      isSilent: details.playSound === false,
       category: details.category,
-      soundName: soundName,
       userInfo: details.userInfo,
-      repeatInterval: details.repeatType,
-      category: details.category,
+      repeats: (details.repeatType && details.repeatType == "day"),
     };
 
     if (details.number) {
-      iosDetails.applicationIconBadgeNumber = parseInt(details.number, 10);
+      iosDetails.badge = parseInt(details.number, 10);
     }
 
-    // ignore Android only repeatType
-    if (!details.repeatType || details.repeatType === 'time') {
-      delete iosDetails.repeatInterval;
-    }
-    this.handler.scheduleLocalNotification(iosDetails);
+    this.handler.addNotificationRequest(iosDetails);
   } else {
     if (details && typeof details.number === 'number') {
       if (isNaN(details.number)) {
@@ -284,6 +293,10 @@ Notifications.localNotificationSchedule = function(details) {
   
     if(details && Array.isArray(details.actions)) {
       details.actions = JSON.stringify(details.actions);
+    }
+
+    if(details.userInfo) {
+      details.userInfo = JSON.stringify(details.userInfo);
     }
 
     details.fireDate = details.date.getTime();
@@ -350,13 +363,15 @@ Notifications._transformNotificationObject = function(data, isFromBackground = n
     _notification = {
       id: notifData?.id,
       foreground: !isFromBackground,
-      userInteraction: isFromBackground,
+      userInteraction: notifData?.userInteraction === 1 || false,
       message: data.getMessage(),
       data: notifData,
       badge: data.getBadgeCount(),
       title: data.getTitle(),
       soundName: data.getSound(),
       fireDate: Date.parse(data._fireDate),
+      action: data.getActionIdentifier(),
+      reply_text: data.getUserText(),
       finish: (res) => data.finish(res)
     };
 
@@ -378,6 +393,15 @@ Notifications._transformNotificationObject = function(data, isFromBackground = n
         /* void */
       }
     }
+    
+    if ( typeof _notification.userInfo === 'string' ) {
+      try {
+        _notification.userInfo = JSON.parse(_notification.userInfo);
+      } catch(e) {
+        /* void */
+      }
+    }
+
 
     _notification.data = {
       ...(typeof _notification.userInfo === 'object' ? _notification.userInfo : {}),
@@ -448,8 +472,12 @@ Notifications.scheduleLocalNotification = function() {
   return this.callNative('scheduleLocalNotification', arguments);
 };
 
-Notifications.cancelLocalNotifications = function() {
-  return this.callNative('cancelLocalNotifications', arguments);
+Notifications.cancelLocalNotifications = function(userInfo) {
+  if ( Platform.OS === 'ios' ) {
+    return this.callNative('removePendingNotificationRequests', [[userInfo.id]]);
+  } else {
+    return this.callNative('cancelLocalNotifications', [userInfo]);
+  }
 };
 
 Notifications.clearLocalNotification = function() {
@@ -457,7 +485,11 @@ Notifications.clearLocalNotification = function() {
 };
 
 Notifications.cancelAllLocalNotifications = function() {
-  return this.callNative('cancelAllLocalNotifications', arguments);
+  if ( Platform.OS === 'ios' ) {
+    return this.callNative('removeAllPendingNotificationRequests', arguments);
+  } else if (Platform.OS === 'android') {
+    return this.callNative('cancelAllLocalNotifications', arguments);
+  }
 };
 
 Notifications.setApplicationIconBadgeNumber = function() {
@@ -505,17 +537,22 @@ Notifications.getScheduledLocalNotifications = function(callback) {
 			if(Platform.OS === 'ios'){
 				mappedNotifications = notifications.map(notif => {
 					return ({
-						soundName: notif.soundName,
-						repeatInterval: notif.repeatInterval,
-						id: notif.userInfo?.id,
-            date: new Date(notif.fireDate),
-						number: notif?.applicationIconBadgeNumber,
-						message: notif?.alertBody,
-						title: notif?.alertTitle,
+						soundName: notif?.sound,
+						id: notif.id,
+                        date: (notif.date ? new Date(notif.date) : null),
+						number: notif?.badge,
+						message: notif?.body,
+            title: notif?.title,
+            data: notif?.userInfo
 					})
 				})
 			} else if(Platform.OS === 'android') {
 				mappedNotifications = notifications.map(notif => {
+
+          try {
+            notif.data = JSON.parse(notif.data);
+          } catch(e) { }
+
 					return ({
 						soundName: notif.soundName,
 						repeatInterval: notif.repeatInterval,
@@ -524,6 +561,7 @@ Notifications.getScheduledLocalNotifications = function(callback) {
 						number: notif.number,
 						message: notif.message,
 						title: notif.title,
+						data: notif.data,
 					})
 				})
 			}
@@ -531,7 +569,11 @@ Notifications.getScheduledLocalNotifications = function(callback) {
 		callback(mappedNotifications);
 	}
 
-	return this.callNative('getScheduledLocalNotifications', [mapNotifications]);
+  if(Platform.OS === 'ios'){
+    return this.callNative('getPendingNotificationRequests', [mapNotifications]);
+  } else {
+    return this.callNative('getScheduledLocalNotifications', [mapNotifications]);
+  }
 }
 
 Notifications.removeDeliveredNotifications = function() {
@@ -561,5 +603,9 @@ Notifications.channelBlocked = function() {
 Notifications.deleteChannel = function() {
   return this.callNative('deleteChannel', arguments);
 };
+
+Notifications.setNotificationCategories = function() {
+  return this.callNative('setNotificationCategories', arguments);
+}
 
 module.exports = Notifications;
