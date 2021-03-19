@@ -329,7 +329,7 @@ Notifications._onRemoteFetch = function(notificationData) {
 Notifications._onAction = function({...notification}) {
   if ( typeof notification.data === 'string' ) {
     try {
-      notification.data = JSON.parse(notification.data);
+      notification.data = JSON.parse(notificationData.data);
     } catch(e) {
       /* void */
     }
